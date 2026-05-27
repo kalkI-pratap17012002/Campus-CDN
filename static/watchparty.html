@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campus CDN — Watch Party</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #2f81f7;
+      --ok: #3fb950;
+      --warn: #d29922;
+      --err: #f85149;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      min-height: 100vh;
+    }
+    header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    header h1 {
+      font-size: 18px;
+      margin: 0;
+      letter-spacing: 0.3px;
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    input[type=text] {
+      width: 100%;
+      padding: 10px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    input[type=text]:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    button {
+      padding: 10px 16px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 8px;
+    }
+    button:hover { opacity: 0.9; }
+    button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .row > div { flex: 1; min-width: 200px; }
+    video {
+      width: 100%;
+      background: #000;
+      border-radius: 8px;
+      max-height: 70vh;
+    }
+    .status {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      color: var(--muted);
+      padding: 12px 0;
+    }
+    .status span b { color: var(--text); }
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+      background: var(--muted);
+    }
+    .dot.ok { background: var(--ok); }
+    .dot.warn { background: var(--warn); }
+    .dot.err { background: var(--err); }
+    .log {
+      margin-top: 12px;
+      max-height: 180px;
+      overflow-y: auto;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .log .send { color: var(--accent); }
+    .log .recv { color: var(--ok); }
+    .log .info { color: var(--muted); }
+    .log .err { color: var(--err); }
+    .share {
+      background: #0d1117;
+      border: 1px dashed var(--border);
+      padding: 10px;
+      border-radius: 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+      word-break: break-all;
+      margin-top: 8px;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Campus CDN — Watch Party</h1>
+    <span class="status"><span class="dot" id="conn-dot"></span><span id="conn-text">disconnected</span></span>
+  </header>
+
+  <main>
+    <section id="setup" class="panel">
+      <h2 style="margin-top:0;font-size:16px;">Join or create a room</h2>
+      <div class="row">
+        <div>
+          <label for="file-id">File ID (from /upload)</label>
+          <input type="text" id="file-id" placeholder="0e4c965b-ed53-4fc5-b4f2-..." />
+        </div>
+        <div>
+          <label for="peer-id">Your name</label>
+          <input type="text" id="peer-id" placeholder="alice" />
+        </div>
+      </div>
+      <label for="room-id">Room ID (leave blank to create new)</label>
+      <input type="text" id="room-id" placeholder="ABCDEF" />
+      <button id="join-btn">Join</button>
+      <button id="create-btn" class="secondary">Create new room</button>
+    </section>
+
+    <section id="player" class="panel hidden">
+      <video id="video" controls playsinline></video>
+      <div class="status">
+        <span><b id="room-label">—</b> · <span id="member-count">0</span> members</span>
+        <span>last sync by <b id="updated-by">—</b></span>
+        <span>player: <b id="player-state">paused</b> @ <b id="player-time">0.00</b>s</span>
+      </div>
+      <div class="share">
+        Share this link to invite: <span id="share-url">—</span>
+      </div>
+      <div class="log" id="log"></div>
+    </section>
+  </main>
+
+<script>
+const SEEK_TOLERANCE = 1.5;
+const APPLY_GRACE_MS = 1000;
+const DEBOUNCE_MS = 250;
+
+const $ = (id) => document.getElementById(id);
+const log = (cls, msg) => {
+  const el = $("log");
+  const line = document.createElement("div");
+  line.className = cls;
+  const ts = new Date().toLocaleTimeString();
+  line.textContent = `[${ts}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+};
+
+const setConn = (state, text) => {
+  $("conn-dot").className = "dot " + state;
+  $("conn-text").textContent = text;
+};
+
+const params = new URLSearchParams(location.search);
+$("file-id").value = params.get("file_id") || "";
+$("room-id").value = params.get("room_id") || "";
+$("peer-id").value = params.get("peer_id") || ("user-" + Math.random().toString(36).slice(2, 6));
+
+async function createRoom(fileId, hostId) {
+  const response = await fetch("/watchparty/create", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({host_id: hostId, file_id: fileId}),
+  });
+  if (!response.ok) throw new Error(`create_room failed: ${response.status}`);
+  return (await response.json()).room_id;
+}
+
+function startSession(fileId, roomId, peerId) {
+  $("setup").classList.add("hidden");
+  $("player").classList.remove("hidden");
+  $("room-label").textContent = roomId;
+
+  const shareUrl = `${location.origin}/watchparty?file_id=${encodeURIComponent(fileId)}&room_id=${encodeURIComponent(roomId)}`;
+  $("share-url").textContent = shareUrl;
+
+  const video = $("video");
+  video.src = `/stream/${fileId}`;
+
+  let applyGraceUntil = 0;
+  let lastEmit = 0;
+
+  const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${wsProto}//${location.host}/watchparty/ws/${encodeURIComponent(roomId)}/${encodeURIComponent(peerId)}`);
+
+  ws.onopen = () => {
+    setConn("ok", `connected as ${peerId}`);
+    log("info", `joined room ${roomId}`);
+  };
+  ws.onclose = () => setConn("err", "disconnected");
+  ws.onerror = () => setConn("err", "error");
+
+  ws.onmessage = async (event) => {
+    let message;
+    try { message = JSON.parse(event.data); } catch { return; }
+
+    if (message.type === "MEMBER_JOINED" || message.type === "MEMBER_LEFT") {
+      $("member-count").textContent = message.member_count;
+      log("info", `${message.type} ${message.peer_id} (${message.member_count} members)`);
+      return;
+    }
+
+    if (message.type !== "STATE") return;
+    if (message.updated_by === peerId) return;
+
+    const targetTime = Number(message.timestamp_seconds);
+    const wantPlaying = Boolean(message.is_playing);
+    $("updated-by").textContent = message.updated_by;
+    log("recv", `${message.updated_by} -> playing=${wantPlaying} t=${targetTime.toFixed(2)}s`);
+
+    applyGraceUntil = performance.now() + APPLY_GRACE_MS;
+    try {
+      if (Math.abs(video.currentTime - targetTime) > SEEK_TOLERANCE) {
+        video.currentTime = targetTime;
+      }
+      if (wantPlaying && video.paused) await video.play();
+      else if (!wantPlaying && !video.paused) video.pause();
+    } catch (err) {
+      log("err", `apply failed: ${err.message}`);
+    }
+  };
+
+  const send = (type) => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    if (performance.now() < applyGraceUntil) return;
+    const now = performance.now();
+    if (now - lastEmit < DEBOUNCE_MS) return;
+    lastEmit = now;
+    const payload = {type, timestamp_seconds: video.currentTime, peer_id: peerId};
+    ws.send(JSON.stringify(payload));
+    log("send", `${type} t=${video.currentTime.toFixed(2)}s`);
+  };
+
+  video.addEventListener("play", () => send("PLAY"));
+  video.addEventListener("pause", () => send("PAUSE"));
+  video.addEventListener("seeked", () => send("SEEK"));
+  video.addEventListener("timeupdate", () => {
+    $("player-time").textContent = video.currentTime.toFixed(2);
+    $("player-state").textContent = video.paused ? "paused" : "playing";
+  });
+}
+
+$("create-btn").addEventListener("click", async () => {
+  const fileId = $("file-id").value.trim();
+  const peerId = $("peer-id").value.trim();
+  if (!fileId || !peerId) { alert("file_id and peer-id required"); return; }
+  try {
+    const roomId = await createRoom(fileId, peerId);
+    startSession(fileId, roomId, peerId);
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$("join-btn").addEventListener("click", () => {
+  const fileId = $("file-id").value.trim();
+  const roomId = $("room-id").value.trim();
+  const peerId = $("peer-id").value.trim();
+  if (!fileId || !roomId || !peerId) { alert("file_id, room_id, peer-id all required"); return; }
+  startSession(fileId, roomId, peerId);
+});
+</script>
+</body>
+</html>

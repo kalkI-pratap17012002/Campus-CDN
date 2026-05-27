@@ -1,0 +1,15 @@
+fastapi>=0.110.0
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+psycopg2-binary
+python-multipart
+python-dotenv
+tqdm
+pytest
+pytest-asyncio
+pytest-timeout
+async-asgi-testclient
+aiofiles
+httpx
+redis

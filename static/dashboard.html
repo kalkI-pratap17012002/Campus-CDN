@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campus CDN Analytics Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --card-alt: #151823;
+      --accent: #6366f1;
+      --accent-soft: #8b5cf6;
+      --accent-faint: rgba(99, 102, 241, 0.18);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --border: rgba(148, 163, 184, 0.12);
+      --success: #22c55e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "SF Pro Display", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(99, 102, 241, 0.16), transparent 28%),
+        radial-gradient(circle at top right, rgba(139, 92, 246, 0.14), transparent 24%),
+        linear-gradient(180deg, #0f1117 0%, #111421 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 4vw, 40px);
+      letter-spacing: -0.03em;
+    }
+
+    .header p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .refresh-pill {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 10px 14px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .stats-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 18px;
+    }
+
+    .charts-grid,
+    .tables-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-bottom: 18px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--card) 0%, var(--card-alt) 100%);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 18px 20px;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18);
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .stat-value {
+      font-size: clamp(28px, 3vw, 36px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .stat-footnote {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .chart-wrap {
+      height: 320px;
+      position: relative;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    thead th {
+      text-align: left;
+      color: var(--muted);
+      padding: 0 0 12px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody td {
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      background: var(--accent-faint);
+      color: #c7d2fe;
+      padding: 6px 10px;
+      font-size: 12px;
+      border: 1px solid rgba(99, 102, 241, 0.28);
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 18px 0 6px;
+    }
+
+    @media (max-width: 1080px) {
+      .stats-grid,
+      .charts-grid,
+      .tables-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .header {
+        flex-direction: column;
+        align-items: start;
+      }
+
+      .stats-grid,
+      .charts-grid,
+      .tables-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1>Campus CDN Dashboard</h1>
+        <p>Live transfer, cache, peer, and watch-party analytics refreshed every 10 seconds.</p>
+      </div>
+      <div class="refresh-pill" id="lastRefresh">Refreshing…</div>
+    </div>
+
+    <div class="grid stats-grid">
+      <div class="card">
+        <div class="stat-label">Total Transfers</div>
+        <div class="stat-value" id="totalTransfers">0</div>
+        <div class="stat-footnote" id="watchPartyCount">0 active watch parties</div>
+      </div>
+      <div class="card">
+        <div class="stat-label">Cache Hit Ratio</div>
+        <div class="stat-value" id="cacheHitRatio">0%</div>
+        <div class="stat-footnote" id="cachePerf">0 cached chunks</div>
+      </div>
+      <div class="card">
+        <div class="stat-label">Active Peers</div>
+        <div class="stat-value" id="activePeers">0</div>
+        <div class="stat-footnote" id="peerTransferRatio">0% from peers</div>
+      </div>
+      <div class="card">
+        <div class="stat-label">Bytes Served</div>
+        <div class="stat-value" id="bytesServed">0 GB</div>
+        <div class="stat-footnote" id="uploadCount">0 uploads recorded</div>
+      </div>
+    </div>
+
+    <div class="grid charts-grid">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Bandwidth Over Last 24 Hours</div>
+          <span class="badge">Hourly Aggregate</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="bandwidthChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Transfer Sources</div>
+          <span class="badge">Cache vs Peer vs Origin</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="sourcesChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid tables-grid">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Top 5 Files by Downloads</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Filename</th>
+              <th>Downloads</th>
+              <th>Size Served</th>
+            </tr>
+          </thead>
+          <tbody id="filesTable"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Peer Contributions</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Peer IP</th>
+              <th>Chunks Served</th>
+              <th>Bandwidth</th>
+            </tr>
+          </thead>
+          <tbody id="peersTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const palette = {
+      indigo: "#6366f1",
+      purple: "#8b5cf6",
+      violet: "#a855f7",
+      slate: "#94a3b8",
+      grid: "rgba(148, 163, 184, 0.12)",
+      text: "#e2e8f0",
+    };
+
+    let bandwidthChart;
+    let sourcesChart;
+
+    function formatBytes(bytes) {
+      if (!bytes) return "0 B";
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      const value = bytes / Math.pow(1024, power);
+      return `${value.toFixed(power === 0 ? 0 : 1)} ${units[power]}`;
+    }
+
+    function formatGb(bytes) {
+      return `${(bytes / (1024 ** 3)).toFixed(2)} GB`;
+    }
+
+    function percent(value) {
+      return `${(Number(value) * 100).toFixed(1)}%`;
+    }
+
+    async function fetchJson(url) {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Request failed: ${url}`);
+      }
+      return response.json();
+    }
+
+    function renderTableBody(elementId, rows, mapper, emptyText) {
+      const tbody = document.getElementById(elementId);
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="3" class="empty">${emptyText}</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map(mapper).join("");
+    }
+
+    function buildCharts() {
+      const bandwidthCtx = document.getElementById("bandwidthChart").getContext("2d");
+      const sourcesCtx = document.getElementById("sourcesChart").getContext("2d");
+
+      bandwidthChart = new Chart(bandwidthCtx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [{
+            label: "Bytes",
+            data: [],
+            borderColor: palette.indigo,
+            backgroundColor: "rgba(99, 102, 241, 0.18)",
+            fill: true,
+            tension: 0.32,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+          }]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+          },
+          scales: {
+            x: {
+              ticks: { color: palette.slate },
+              grid: { color: palette.grid },
+            },
+            y: {
+              ticks: {
+                color: palette.slate,
+                callback: (value) => formatBytes(value),
+              },
+              grid: { color: palette.grid },
+            }
+          }
+        }
+      });
+
+      sourcesChart = new Chart(sourcesCtx, {
+        type: "doughnut",
+        data: {
+          labels: ["Cache", "Peer", "Origin"],
+          datasets: [{
+            data: [0, 0, 0],
+            backgroundColor: [palette.indigo, palette.purple, palette.violet],
+            borderWidth: 0,
+          }]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: {
+                color: palette.text,
+                boxWidth: 14,
+              }
+            }
+          },
+          cutout: "66%",
+        }
+      });
+    }
+
+    async function refreshDashboard() {
+      try {
+        const [summary, bandwidth, peers, cache] = await Promise.all([
+          fetchJson("/analytics/summary"),
+          fetchJson("/analytics/bandwidth?hours=24"),
+          fetchJson("/analytics/peers"),
+          fetchJson("/analytics/cache"),
+        ]);
+
+        document.getElementById("totalTransfers").textContent = summary.total_downloads.toLocaleString();
+        document.getElementById("cacheHitRatio").textContent = percent(summary.cache_hit_ratio);
+        document.getElementById("activePeers").textContent = summary.active_peers.toLocaleString();
+        document.getElementById("bytesServed").textContent = formatGb(summary.total_bytes_transferred);
+        document.getElementById("watchPartyCount").textContent = `${summary.active_watch_parties} active watch parties`;
+        document.getElementById("cachePerf").textContent = `${cache.total_cached_chunks} cached chunks`;
+        document.getElementById("peerTransferRatio").textContent = `${percent(summary.peer_transfer_ratio)} from peers`;
+        document.getElementById("uploadCount").textContent = `${summary.total_uploads} uploads recorded`;
+        document.getElementById("lastRefresh").textContent = `Last refresh ${new Date().toLocaleTimeString()}`;
+
+        bandwidthChart.data.labels = bandwidth.map(point => point.hour.slice(11, 16));
+        bandwidthChart.data.datasets[0].data = bandwidth.map(point => point.bytes);
+        bandwidthChart.update();
+
+        sourcesChart.data.datasets[0].data = [
+          summary.cache_transfers || 0,
+          summary.peer_transfers || 0,
+          summary.origin_transfers || 0,
+        ];
+        sourcesChart.update();
+
+        renderTableBody(
+          "filesTable",
+          summary.top_files || [],
+          (file) => `
+            <tr>
+              <td title="${file.file_id}">${file.filename}</td>
+              <td>${Number(file.downloads).toLocaleString()}</td>
+              <td>${formatBytes(file.bytes_served)}</td>
+            </tr>
+          `,
+          "No file downloads recorded yet."
+        );
+
+        renderTableBody(
+          "peersTable",
+          peers.slice(0, 5),
+          (peer) => `
+            <tr>
+              <td class="mono">${peer.ip}</td>
+              <td>${Number(peer.chunks_served).toLocaleString()}</td>
+              <td>${formatBytes(peer.bytes_contributed)}</td>
+            </tr>
+          `,
+          "No peer contributions recorded yet."
+        );
+      } catch (error) {
+        document.getElementById("lastRefresh").textContent = `Refresh failed at ${new Date().toLocaleTimeString()}`;
+        console.error(error);
+      }
+    }
+
+    buildCharts();
+    refreshDashboard();
+    setInterval(refreshDashboard, 10000);
+  </script>
+</body>
+</html>
